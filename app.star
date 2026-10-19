@@ -1,36 +1,17 @@
-# Verse of the Day — one anchor verse per day, chosen by the date.
+# Columbia Countdown — days to the November trip, then just joy.
 #
-# The shelf is small on purpose: these are the verses that carried one
-# man out of the pit, not a random draw from the whole Bible. Each
-# entry is a single short clause in public-domain (KJV) wording — all
-# that honestly fits a 64x32 panel — with its reference above it.
-#
-# Rotation is deterministic: day-of-year modulo the shelf length. No
-# network, no state: every render on the same date shows the same
-# verse, and the verse changes at midnight, not at refresh.
+# Three seasons, all pure date arithmetic from ctx.now:
+#   before Nov 5        a countdown in the Sobriety Counter's layout
+#   Nov 5 through Nov 8 the panel simply says COLUMBIA!
+#   after Nov 8         a quiet dash and TRIP DONE — a countdown that
+#                       is over should stop counting.
 
-GOLD = "#E8B33A"
-WHITE = "#EDEFF6"
-BG = "#08090D"
+MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN",
+          "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
 
-# [reference, clause] — KJV wording, kept to one clause so the words
-# stay big enough to read across a room.
-VERSES = [
-    ["PSALM 88:13", "UNTO THEE HAVE I CRIED, O LORD"],
-    ["PSALM 91:2", "HE IS MY REFUGE AND MY FORTRESS"],
-    ["2 COR 5:17", "HE IS A NEW CREATURE"],
-    ["PSALM 94:19", "THY COMFORTS DELIGHT MY SOUL"],
-    ["MATT 11:28", "I WILL GIVE YOU REST"],
-    ["LAM 3:23", "GREAT IS THY FAITHFULNESS"],
-    ["ISAIAH 58:11", "THE LORD SHALL GUIDE THEE CONTINUALLY"],
-    ["JAMES 1:5", "LET HIM ASK OF GOD"],
-]
-
-# Row pitch per face: glyph rows plus breathing room (as measured in
-# rss-headlines). The block below picks the largest face whose wrap
-# fits the rows available.
-PITCH = {"5x7": 8, "4x5": 7, "3x4": 5}
-FACES = ["5x7", "4x5", "3x4"]
+DIGITS = "0123456789"
+FALLBACK_START = [2026, 11, 5]
+FALLBACK_END = [2026, 11, 8]
 
 
 def days_from_civil(y, m, d):
@@ -44,78 +25,52 @@ def days_from_civil(y, m, d):
     return era * 146097 + doe - 719468
 
 
-def split_long(c, word, font, maxw):
-    """A word wider than the column, chopped into pieces that fit."""
-    parts = []
-    rest = word
-    for _i in range(24):
-        if c.text_width(rest, font) <= maxw:
-            parts.append(rest)
-            return parts
-        cut = 1
-        for k in range(len(rest), 0, -1):
-            if c.text_width(rest[:k], font) <= maxw:
-                cut = k
-                break
-        parts.append(rest[:cut])
-        rest = rest[cut:]
-        if rest == "":
-            return parts
-    parts.append(rest)
-    return parts
+def parse_date(s, fallback):
+    """A date setting -> [y, m, d]. Digits only, first eight, hand-checked."""
+    ds = ""
+    t = str(s)
+    for i in range(len(t)):
+        if DIGITS.find(t[i]) >= 0:
+            ds = ds + t[i]
+    if len(ds) < 8:
+        return fallback
+    out = [int(ds[0:4]), int(ds[4:6]), int(ds[6:8])]
+    if out[0] < 1900 or out[1] < 1 or out[1] > 12 or out[2] < 1 or out[2] > 31:
+        return fallback
+    return out
 
 
-def wrap(c, text, font, maxw):
-    """Greedily pack words into lines no wider than maxw."""
-    lines = []
-    cur = ""
-    for raw in text.split(" "):
-        if raw == "":
-            continue
-        for w in split_long(c, raw, font, maxw):
-            trial = w if cur == "" else cur + " " + w
-            if c.text_width(trial, font) <= maxw:
-                cur = trial
-            else:
-                if cur != "":
-                    lines.append(cur)
-                cur = w
-    if cur != "":
-        lines.append(cur)
-    return lines
+def countdown(c, ctx):
+    start = parse_date(ctx.inputs.get("start", "2026-11-05"), FALLBACK_START)
+    end = parse_date(ctx.inputs.get("end", "2026-11-08"), FALLBACK_END)
+    accent = ctx.inputs.get("accent", "#7CC4E8")
 
+    today = days_from_civil(ctx.now.year, ctx.now.month, ctx.now.day)
+    first = days_from_civil(start[0], start[1], start[2])
+    last = days_from_civil(end[0], end[1], end[2])
 
-def verse(c, ctx):
-    doy = days_from_civil(ctx.now.year, ctx.now.month, ctx.now.day) - \
-        days_from_civil(ctx.now.year, 1, 1)
-    pick = VERSES[doy % len(VERSES)]
-    ref = pick[0]
-    text = pick[1]
+    c.fill("#08090D")
 
-    c.fill(BG)
-    c.text_fit(ref, c.width // 2, 1, ["5x7", "4x5"], color = GOLD,
-               align = "center", maxw = c.width - 2)
-
-    # Words get the rest of the panel: y 10..31, centred as a block.
-    top = 10
-    height = c.height - top - 1
-    face = FACES[len(FACES) - 1]
-    lines = []
-    for f in FACES:
-        rows = (height + 1) // PITCH[f]
-        if rows < 1:
-            continue
-        cand = wrap(c, text, f, c.width - 4)
-        if len(cand) <= rows:
-            face = f
-            lines = cand
-            break
-    if not lines:
-        face = FACES[len(FACES) - 1]
-        rows = (height + 1) // PITCH[face]
-        lines = wrap(c, text, face, c.width - 4)[:rows]
-    used = len(lines) * PITCH[face] - 1
-    y = top + (height - used) // 2
-    for i in range(len(lines)):
-        c.text(lines[i], c.width // 2, y + i * PITCH[face], font = face,
-               color = WHITE, align = "center")
+    if today < first:
+        c.text_fit("DAYS TO COLUMBIA", c.width // 2, 0, ["4x5", "3x4"],
+                   color = accent, align = "center", maxw = c.width - 2)
+        c.text_fit(str(first - today), c.width // 2, 5,
+                   ["16x20", "10x16", "7x12"], color = "#FFFFFF",
+                   align = "center", maxw = c.width - 4)
+        when = "%s %d %d" % (MONTHS[start[1] - 1], start[2], start[0])
+        c.text_fit(when, c.width // 2, 26, ["4x5", "3x4"],
+                   color = "#8A8AA8", align = "center", maxw = c.width - 2)
+    elif today <= last:
+        c.text_fit("NOV 5-8", c.width // 2, 1, ["4x5", "3x4"],
+                   color = "#8A8AA8", align = "center", maxw = c.width - 2)
+        c.text_fit("COLUMBIA!", c.width // 2, 9, ["6x8", "5x7", "4x5"],
+                   color = accent, align = "center", maxw = c.width - 2)
+        c.text_fit("SOUTH CAROLINA", c.width // 2, 25, ["4x5", "3x4"],
+                   color = "#FFFFFF", align = "center", maxw = c.width - 2)
+    else:
+        c.text_fit("COLUMBIA", c.width // 2, 0, ["4x5", "3x4"],
+                   color = accent, align = "center", maxw = c.width - 2)
+        c.text("-", c.width // 2, 5, font = "16x20", color = "#FFFFFF",
+               align = "center")
+        c.text_fit("TRIP DONE", c.width // 2, 26, ["4x5", "3x4"],
+                   color = "#8A8AA8", align = "center", maxw = c.width - 2)
