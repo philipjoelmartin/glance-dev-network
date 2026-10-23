@@ -1,0 +1,14 @@
+gdn: 1
+id: headlines-board
+version: 0.1.0
+name: Headlines Board
+author: joelfullyseeking
+description: "The latest headline for each of your teams — Steelers, Suns, Arizona State, Cardinals and Dodgers — plus the Beaver County Times. One page per source, newest story only."
+category: News
+entry: app.star
+
+width: 64
+height: 32
+refresh: 900
+
+pages: [steelers, suns, asu, cardinals, dodgers, beaver]
